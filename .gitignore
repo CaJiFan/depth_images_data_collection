@@ -1,6 +1,6 @@
 recordings
 processed_*
-trtm_data_*
+trtm_*
 *.zip
 *.pt
 .env
