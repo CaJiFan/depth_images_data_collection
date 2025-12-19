@@ -3,3 +3,5 @@ processed_*
 trtm_data_*
 *.zip
 *.pt
+.env
+.*ts
