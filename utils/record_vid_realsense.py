@@ -76,7 +76,7 @@ def apply_trtm_shading(depth_map, mask_bg):
     processed[mask_bg] = 255
 
     print(f"Table Depth: {table_depth} mm")
-    print(processed)
+    # print(processed)
     
     return processed
 
@@ -113,12 +113,12 @@ def main():
 
     # Setup Recording
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    save_folder = f"trtm_data_realsense_aligned_{timestamp}"
-    is_recording = False
+    save_folder = f"trtm_snapshots_{timestamp}"
     frame_count = 0
+    show_flash = 0
 
-    print(f"\nReady. Saving to: {save_folder}")
-    print("Controls: [S] Record Frame | [Q] Quit")
+    print(f"\nReady. Snapshots will be saved to: {save_folder}")
+    print("Controls: [S] Take Snapshot | [Q] Quit")
 
     try:
         while True:
@@ -141,7 +141,7 @@ def main():
 
             # No resizing needed! Dimensions now match automatically.
             height, width = depth_raw_mm.shape
-            print(f"Frame Size: {width}x{height}")
+            # print(f"Frame Size: {width}x{height}")
 
             # --- YOLO SEGMENTATION ---
             results = model.predict(color_image, verbose=False, imgsz=width, conf=0.3)
@@ -179,23 +179,31 @@ def main():
             key = cv2.waitKey(1) & 0xFF
             
             if key == ord('s'):
-                is_recording = not is_recording
-                if is_recording:
-                    os.makedirs(save_folder, exist_ok=True)
-                    print(f"[*] START RECORDING to {save_folder}")
-                else:
-                    print(f"[*] STOP RECORDING. Total: {frame_count}")
+                # 1. Create folder only when first picture is taken
+                os.makedirs(save_folder, exist_ok=True)
+                
+                # 2. Filenames
+                depth_filename = os.path.join(save_folder, f"{frame_count:06d}.real_depth.png")
+                color_filename = os.path.join(save_folder, f"{frame_count:06d}.real_color.png")
 
-            if is_recording:
-                depth_filename = os.path.join(save_folder, f"depth_{frame_count:05d}.png")
-                color_filename = os.path.join(save_folder, f"color_{frame_count:05d}.png")
-
-                # Save Data
-                cv2.imwrite(depth_filename, masked_raw_depth) 
+                # 3. Save Data (Raw 16-bit Depth + Masked Color)
+                cv2.imwrite(depth_filename, trtm_display_bgr) 
                 cv2.imwrite(color_filename, masked_color)
 
+                print(f"[{frame_count}] Snapshot Saved: {depth_filename}")
                 frame_count += 1
-                cv2.circle(combined_display, (30, 30), 10, (0, 0, 255), -1)
+                show_flash = 5 # Show flash for 5 frames
+
+            if show_flash > 0:
+                # Draw a white rectangle over the whole image
+                overlay = combined_display.copy()
+                cv2.rectangle(overlay, (0, 0), (combined_display.shape[1], combined_display.shape[0]), (255, 255, 255), -1)
+                # Alpha blend to make it look like a flash
+                cv2.addWeighted(overlay, 0.5, combined_display, 0.5, 0, combined_display)
+                show_flash -= 1
+                # Draw Text
+                cv2.putText(combined_display, f"SAVED #{frame_count-1}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
 
             cv2.imshow("RealSense Aligned TRTM", combined_display)
 
