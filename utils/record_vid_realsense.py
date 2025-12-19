@@ -73,7 +73,10 @@ def apply_trtm_shading(depth_map, mask_bg):
     height_map = table_depth - depth_map
     processed = FLAT_PIXEL_VAL + (height_map * PIXEL_PER_MM)
     processed = np.clip(processed, 0, 255).astype(np.uint8)
-    processed[mask_bg] = 0 
+    processed[mask_bg] = 255
+
+    print(f"Table Depth: {table_depth} mm")
+    print(processed)
     
     return processed
 
@@ -145,7 +148,7 @@ def main():
             
             combined_mask = np.zeros((height, width), dtype=np.uint8)
 
-            print(results[0].masks is None)
+            print('results none?', results[0].masks is None)
 
             if results[0].masks is not None:
                 masks_data = results[0].masks.data.cpu().numpy()
@@ -166,11 +169,11 @@ def main():
             masked_raw_depth = cv2.bitwise_and(depth_raw_mm, depth_raw_mm, mask=binary_mask)
 
             # 3. TRTM Visualization (Display)
-            trtm_display = apply_trtm_shading(masked_raw_depth, background_mask)
+            trtm_display = apply_trtm_shading(depth_raw_mm, background_mask)
             trtm_display_bgr = cv2.cvtColor(trtm_display, cv2.COLOR_GRAY2BGR)
 
             # Stack side-by-side
-            combined_display = np.hstack((color_image, trtm_display_bgr))
+            combined_display = np.hstack((masked_color, trtm_display_bgr))
 
             # --- RECORDING ---
             key = cv2.waitKey(1) & 0xFF
