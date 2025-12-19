@@ -4,4 +4,4 @@ trtm_data_*
 *.zip
 *.pt
 .env
-.*ts
+*.ts
