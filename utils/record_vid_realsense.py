@@ -13,7 +13,7 @@ MODEL_PATH = 'yoloe-11l-seg.pt'
 # TRTM Visualization Parameters (Matches paper specs for display)
 FLAT_PIXEL_VAL = 192       # Base gray level for flat cloth
 PIXEL_PER_MM = 2.0         # 1cm (10mm) = 20 pixel units -> 1mm = 2 units
-MANUAL_TABLE_DEPTH = None  # Set this (e.g., 850) if auto-detection is unstable
+MANUAL_TABLE_DEPTH = 380  # Set this (e.g., 850) if auto-detection is unstable
 
 def find_best_config():
     """
@@ -61,31 +61,33 @@ def find_best_config():
 
 def apply_trtm_shading(depth_map, mask_bg):
     """ Applies TRTM paper shading (Gray table, White wrinkles) """
+    print(depth_map)
     valid_pixels = depth_map[depth_map > 0]
+    # print('Estimated table depth',  np.percentile(valid_pixels, 98))
     
     if MANUAL_TABLE_DEPTH:
         table_depth = MANUAL_TABLE_DEPTH
     elif len(valid_pixels) > 0:
         table_depth = np.percentile(valid_pixels, 98)
     else:
-        return np.zeros_like(depth_map, dtype=np.uint8)
+        return np.zeros_like(depth_map, dtype=np.uint8), 0.1
 
     height_map = table_depth - depth_map
     processed = FLAT_PIXEL_VAL + (height_map * PIXEL_PER_MM)
     processed = np.clip(processed, 0, 255).astype(np.uint8)
     processed[mask_bg] = 255
 
-    print(f"Table Depth: {table_depth} mm")
+    # print(f"Table Depth: {table_depth} mm")
     # print(processed)
     
-    return processed
+    return processed, table_depth
 
 def main():
     # 1. Initialize YOLO
     print(f"Loading YOLO model: {MODEL_PATH}...")
     try:
         model = YOLO(MODEL_PATH)
-        model.set_classes(["cloth", "towel", 'phone', 'teddy bear'])
+        model.set_classes(["cloth", "towel"])
         print("Model loaded.")
     except Exception as e:
         print(f"Error loading model: {e}")
@@ -141,7 +143,7 @@ def main():
 
             # No resizing needed! Dimensions now match automatically.
             height, width = depth_raw_mm.shape
-            # print(f"Frame Size: {width}x{height}")
+            print(f"Frame Size: {width}x{height}, max value: {np.unique(depth_raw_mm, return_counts=True)}")
 
             # --- YOLO SEGMENTATION ---
             results = model.predict(color_image, verbose=False, imgsz=width, conf=0.3)
@@ -169,11 +171,16 @@ def main():
             masked_raw_depth = cv2.bitwise_and(depth_raw_mm, depth_raw_mm, mask=binary_mask)
 
             # 3. TRTM Visualization (Display)
-            trtm_display = apply_trtm_shading(depth_raw_mm, background_mask)
+            trtm_display, table_dist_mm = apply_trtm_shading(depth_raw_mm, background_mask)
             trtm_display_bgr = cv2.cvtColor(trtm_display, cv2.COLOR_GRAY2BGR)
 
             # Stack side-by-side
-            combined_display = np.hstack((masked_color, trtm_display_bgr))
+            combined_display = np.hstack((color_image, trtm_display_bgr))
+
+            if table_dist_mm > 0:
+                cv2.putText(combined_display, f"Table Z: {table_dist_mm/10:.1f} cm", (50, 80), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+
 
             # --- RECORDING ---
             key = cv2.waitKey(1) & 0xFF
